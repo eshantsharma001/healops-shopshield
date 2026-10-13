@@ -1,1 +1,0 @@
-# healops-shopshield
