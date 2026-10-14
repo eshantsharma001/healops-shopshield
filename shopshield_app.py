@@ -1,11 +1,22 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, abort, render_template, jsonify, request
 import sqlite3
 import os
 import time
 
 app = Flask(__name__)
 
-DB_FILE = "shopshield.db"
+DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "shopshield.db")
+
+PAGES = {
+    "about": "about.html",
+    "cart": "cart.html",
+    "checkout": "checkout.html",
+    "contact": "contact.html",
+    "index": "index.html",
+    "product": "product.html",
+    "shop": "shop.html",
+    "wishlist": "wishlist.html",
+}
 
 # 1. Database Setup Function
 def init_db():
@@ -38,7 +49,15 @@ PRODUCTS = [
 
 @app.route('/')
 def home():
-    return render_template('shop.html', products=PRODUCTS)
+    return render_template(PAGES["index"])
+
+
+@app.route('/<page>.html')
+def show_page(page):
+    template = PAGES.get(page)
+    if template is None:
+        abort(404)
+    return render_template(template)
 
 # 2. Day 2 Task: The Order API Route
 @app.route('/api/order', methods=['POST'])
