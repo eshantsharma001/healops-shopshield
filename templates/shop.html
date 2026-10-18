@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>ShopShield Storefront</title>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-logo"><a href="/">ShopShield</a></div>
+        <form action="/" method="GET" class="nav-search">
+            <!-- Retain current active category during a search query -->
+            {% if request.args.get('category') %}
+                <input type="hidden" name="category" value="{{ request.args.get('category') }}">
+            {% endif %}
+            <input type="text" name="search" placeholder="Search products..." value="{{ request.args.get('search', '') }}">
+            <button type="submit">Search</button>
+        </form>
+        <ul class="nav-links">
+            <li><a href="/">Shop</a></li>
+            <li><a href="#" id="cart-nav-link" class="nav-icon">🛒 Cart <span class="cart-count" id="cart-badge">0</span></a></li>
+        </ul>
+    </nav>
+  
+    <main class="store-container">
+        <header class="hero-banner">
+            <div class="hero-content">
+                <h2>Secure Your Shopping Experience</h2>
+                <p>Discover top-tier tech products verified by ShopShield safety protocols.</p>
+                <a href="#products" class="btn-primary">Shop Now</a>
+            </div>
+        </header>
+
+        <!-- DYNAMIC CATEGORY PILL FILTER BAR -->
+        <div class="category-container">
+            <a href="/" class="category-pill {% if not request.args.get('category') %}active-pill{% endif %}">All Items</a>
+            {% for cat in categories %}
+                <a href="/?category={{ cat }}{% if request.args.get('search') %}&search={{ request.args.get('search') }}{% endif %}" 
+                   class="category-pill {% if request.args.get('category') == cat %}active-pill{% endif %}">
+                    {{ cat }}
+                </a>
+            {% endfor %}
+        </div>
+
+        <section id="products" class="product-section">
+            <h3>
+                {% if request.args.get('search') %}
+                    Search Results for "{{ request.args.get('search') }}"
+                {% elif request.args.get('category') %}
+                    Browsing Category: {{ request.args.get('category') }}
+                {% else %}
+                    Featured Products
+                {% endif %}
+            </h3>
+            
+            <div class="product-grid">
+                {% if products %}
+                    {% for product in products %}
+                        <div class="product-card">
+                            <div class="product-image-container" style="height: 200px; overflow: hidden; background: #f7fafc; display: flex; align-items: center; justify-content: center;">
+                                <img src="{{ url_for('static', filename='uploads/' + product.image_filename) }}" alt="{{ product.name }}" style="max-width: 100%; max-height: 100%; object-fit: contain;">
+                            </div>
+                            <div class="product-info">
+                                <span class="product-badge">{{ product.badge }}</span>
+                                <h4>{{ product.name }}</h4>
+                                <p class="product-price">\${{ product.price }}</p>
+                                <button class="btn-add-cart add-to-cart-btn" 
+                                        data-id="{{ product.id }}" 
+                                        data-name="{{ product.name }}" 
+                                        data-price="{{ product.price }}">
+                                    Add to Cart
+                                </button>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p style="color: #666; grid-column: 1 / -1; text-align: center; padding: 40px; border: 2px dashed #ccc; border-radius: 8px;">
+                        No products match your current filtering selections. <a href="/" style="color: #0071dc; font-weight: bold; text-decoration: underline;">Clear all filters</a>
+                    </p>
+                {% endif %}
+            </div>
+        </section>
+    </main>
+
+    <!-- SHOPPING CART SLIDE-OUT DRAWER -->
+    <div id="cart-modal" class="cart-modal">
+        <div class="cart-modal-content">
+            <div class="cart-modal-header">
+                <h3>Your Shopping Cart</h3>
+                <span id="close-cart-btn" class="close-cart">&times;</span>
+            </div>
+            <div id="cart-items-container" class="cart-items-container"></div>
+            <div class="cart-modal-footer">
+                <div class="cart-total-row"><span>Total:</span><span id="cart-total-price">\$0.00</span></div>
+                <button class="btn-checkout" onclick="alert('Checkout coming soon!')">Proceed to Checkout</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Cart Engine -->
+    <script>
+        let cart = JSON.parse(localStorage.getItem('shopshield_cart')) || [];
+        const cartModal = document.getElementById('cart-modal');
+        const cartNavLink = document.getElementById('cart-nav-link');
+        const closeCartBtn = document.getElementById('close-cart-btn');
+        const cartBadge = document.getElementById('cart-badge');
+        const cartItemsContainer = document.getElementById('cart-items-container');
+        const cartTotalPrice = document.getElementById('cart-total-price');
+
+        cartNavLink.addEventListener('click', (e) => { e.preventDefault(); cartModal.classList.add('active'); renderCart(); });
+        closeCartBtn.addEventListener('click', () => { cartModal.classList.remove('active'); });
+
+        document.querySelectorAll('.add-to-cart-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                const id = button.getAttribute('data-id');
+                const name = button.getAttribute('data-name');
+                const price = parseFloat(button.getAttribute('data-price'));
+                const existingItem = cart.find(item => item.id === id);
+                if (existingItem) existingItem.quantity += 1;
+                else cart.push({ id, name, price, quantity: 1 });
+                saveAndRefreshCart();
+            });
+        });
+
+        function saveAndRefreshCart() {
+            localStorage.setItem('shopshield_cart', JSON.stringify(cart));
+            updateBadge();
+            if (cartModal.classList.contains('active')) renderCart();
+        }
+
+        function updateBadge() {
+            cartBadge.textContent = cart.reduce((sum, item) => sum + item.quantity, 0);
+        }
+
+        function changeQuantity(id, change) {
+            const item = cart.find(item => item.id === id);
+            if (item) {
+                item.quantity += change;
+                if (item.quantity <= 0) cart = cart.filter(i => i.id !== id);
+            }
+            saveAndRefreshCart();
+        }
+
+        function renderCart() {
+            cartItemsContainer.innerHTML = '';
+            if (cart.length === 0) {
+                cartItemsContainer.innerHTML = '<p class="empty-cart-msg">Your cart is empty.</p>';
+                cartTotalPrice.textContent = '\$0.00';
+                return;
+            }
+            let total = 0;
+            cart.forEach(item => {
+                total += item.price * item.quantity;
+                const row = document.createElement('div');
+                row.className = 'cart-item-row';
+                row.innerHTML = `
+                    <div class="cart-item-info"><h4>${item.name}</h4><p>$${item.price.toFixed(2)}</p></div>
+                    <div class="cart-item-actions">
+                        <button onclick="changeQuantity('${item.id}', -1)">-</button>
+                        <span>${item.quantity}</span>
+                        <button onclick="changeQuantity('${item.id}', 1)">+</button>
+                    </div>`;
+                cartItemsContainer.appendChild(row);
+            });
+            cartTotalPrice.textContent = `$${total.toFixed(2)}`;
+        }
+        updateBadge();
+    </script>
+</body>
+</html>
