@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -35,7 +36,7 @@
         <!-- DYNAMIC CATEGORY PILL FILTER BAR -->
         <div class="category-container">
             <a href="/" class="category-pill {% if not request.args.get('category') %}active-pill{% endif %}">All Items</a>
-            {% for cat in categories %}
+            {% for cat in ['Laptops', 'Mobiles', 'Sports', 'Fitness', 'Books', 'Supplements'] %}
                 <a href="/?category={{ cat }}{% if request.args.get('search') %}&search={{ request.args.get('search') }}{% endif %}" 
                    class="category-pill {% if request.args.get('category') == cat %}active-pill{% endif %}">
                     {{ cat }}
