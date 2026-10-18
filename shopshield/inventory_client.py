@@ -15,3 +15,8 @@ REQUEST_TIMEOUT_SECONDS = 1.0
 
 #maximum no of retry attempts
 MAX_RETRIES = 3
+
+#base delay for exponential backoff (in seconds)
+BASE_BACKOFF_SECONDS = 0.3
+
+#Local in-memory cache: stores last known stock so we never  show empty data
