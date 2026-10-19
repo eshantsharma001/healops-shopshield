@@ -1,3 +1,12 @@
+import sys
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
+from rate_limiter import is_request_allowed, get_rate_limiter_metrics
+from inventory_client import fetch_stock_with_retry
 import os
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, Response, jsonify
@@ -40,9 +49,30 @@ def requires_auth(f):
             )
         return f(*args, **kwargs)
     return decorated
+# ----------------------------------------------------
+# PROBLEM 4: TRAFFIC SPIKE & LOAD SHEDDING GUARD
+# ----------------------------------------------------
+@app.before_request
+def rate_limit_guard():
+    """Protects ShopShield from sudden traffic surges."""
+    # Don't rate-limit internal health checks or static images
+    if request.path.startswith('/health') or request.path.startswith('/static'):
+        return None
 
+    client_ip = request.remote_addr or '127.0.0.1'
+    allowed, metrics = is_request_allowed(client_ip)
+    
+    if not allowed:
+        # Shed the load with HTTP 429
+        return jsonify({
+            "error": "Traffic Spike Detected",
+            "message": "HealOps Load Shedder: Request dropped to protect application stability.",
+            "status_code": 429,
+            "metrics": metrics
+        }), 429
 # Combined Storefront Route: Handles Category Filtering + Search
 @app.route('/')
+@app.route('/shop')
 def home():
     search_query = request.args.get('search')
     category_filter = request.args.get('category')
@@ -59,13 +89,18 @@ def home():
         query = query.filter(Product.name.like(f"%{search_query}%"))
         
     all_products = query.all()
-    
+
+    # Fetch live stock from Product Service (with retry and fallback!)
+    for product in all_products:
+        stock_data = fetch_stock_with_retry(product.id)
+        product.live_stock = stock_data["stock"]
+        product.live_status = stock_data["status"]
+        product.stock_source = stock_data["source"]
+
     # Get a list of all unique categories in the database to display in the filter bar
-    # (Clean list comprehension filters out duplicates dynamically)
     categories = [p.category for p in Product.query.with_entities(Product.category).distinct()]
     
     return render_template('shop.html', products=all_products, categories=categories)
-
 # Admin panel route updated to save chosen category
 @app.route('/admin', methods=['GET', 'POST'])
 @requires_auth
@@ -117,6 +152,10 @@ def health():
         "service": "shopshield"
     }), 200
 
+@app.route('/api/metrics')
+def metrics():
+    """Returns traffic and load shedding metrics for HealOps."""
+    return jsonify(get_rate_limiter_metrics()), 200
 
 @app.route('/chaos/crash', methods=['POST', 'GET'])
 def chaos_crash():
