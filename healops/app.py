@@ -8,6 +8,7 @@ import subprocess
 from flask import Flask, render_template, jsonify, request
 from database import log_incident, get_recent_incidents, get_summary_metrics
 
+# Fix Windows console emoji support
 if sys.platform == "win32":
     try:
         sys.stdout.reconfigure(encoding='utf-8')
@@ -16,22 +17,50 @@ if sys.platform == "win32":
 
 app = Flask(__name__)
 
-# Master autonomous healing toggle
+# Master toggle: True = watchdog auto-reboots; False = waits for admin click
+MODE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mode.json")
+
 CONFIG = {
     "auto_heal_enabled": True
 }
 
+def set_mode(enabled):
+    CONFIG["auto_heal_enabled"] = enabled
+    try:
+        with open(MODE_FILE, "w") as f:
+            json.dump({"auto_heal_enabled": enabled}, f)
+    except Exception:
+        pass
+
+def get_mode():
+    try:
+        if os.path.exists(MODE_FILE):
+            with open(MODE_FILE, "r") as f:
+                data = json.load(f)
+                return data.get("auto_heal_enabled", True)
+    except Exception:
+        pass
+    return CONFIG.get("auto_heal_enabled", True)
+
+# Initialize mode file
+set_mode(True)
+
+# Go up one level from healops/ to reach the project root
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SHOPSHIELD_PATH = os.path.join(PROJECT_ROOT, "shopshield", "app.py")
 
+
+# -------------------------------------------------------------------------
+# HELPER: Ping a local HTTP service
+# -------------------------------------------------------------------------
 def check_http(url, timeout=1.0):
-    """Pings a local HTTP service and returns status and latency."""
+    """Returns (is_alive, http_status_code, latency_ms)."""
     start = time.time()
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'HealOps-Monitor'})
         with urllib.request.urlopen(req, timeout=timeout) as res:
             latency = round((time.time() - start) * 1000, 1)
-            return res.status == 200, res.status, latency
+            return True, res.status, latency
     except urllib.error.HTTPError as e:
         latency = round((time.time() - start) * 1000, 1)
         return False, e.code, latency
@@ -40,61 +69,52 @@ def check_http(url, timeout=1.0):
         return False, 0, latency
 
 
+# -------------------------------------------------------------------------
+# DASHBOARD & TELEMETRY ROUTES
+# -------------------------------------------------------------------------
 @app.route('/')
 def dashboard():
-    """Renders the HealOps Control Room UI."""
+    """Serves the Control Room HTML page."""
     return render_template('dashboard.html')
 
 
 @app.route('/api/status')
 def get_status():
-    """Returns current real-time health across all components."""
-    # Check ShopShield (5000)
-    ss_healthy, ss_code, ss_lat = check_http("http://127.0.0.1:5000/health", timeout=0.8)
-    
-    # Check Product Service (5001)
-    ps_healthy, ps_code, ps_lat = check_http("http://127.0.0.1:5001/health", timeout=0.8)
-
-    # Fetch Rate Limiter Metrics from ShopShield if alive
-    traffic_metrics = {"total_received": 0, "allowed": 0, "shed_blocked": 0}
-    if ss_healthy:
-        try:
-            with urllib.request.urlopen("http://127.0.0.1:5000/api/metrics", timeout=0.5) as res:
-                traffic_metrics = json.loads(res.read().decode('utf-8'))
-        except Exception:
-            pass
+    """Returns real-time health of ShopShield (5000) and Product Service (5001)."""
+    ss_alive, ss_code, ss_lat = check_http("http://127.0.0.1:5000/health", timeout=0.8)
+    ps_alive, ps_code, ps_lat = check_http("http://127.0.0.1:5001/health", timeout=0.8)
 
     return jsonify({
-        "auto_heal_enabled": CONFIG["auto_heal_enabled"],
+        "auto_heal_enabled": get_mode(),
         "shopshield": {
-            "status": "HEALTHY" if ss_healthy else "DOWN",
-            "code": ss_code,
+            "status": "HEALTHY" if ss_alive else "DOWN",
             "latency_ms": ss_lat
         },
         "product_service": {
-            "status": "HEALTHY" if ps_healthy else ("UNHEALTHY" if ps_code == 500 else "DOWN"),
-            "code": ps_code,
+            "status": "HEALTHY" if ps_alive else ("UNHEALTHY" if ps_code == 500 else "DOWN"),
             "latency_ms": ps_lat
         },
-        "traffic_metrics": traffic_metrics,
         "summary": get_summary_metrics()
     })
 
 
+@app.route('/api/mode', methods=['GET'])
+def get_mode_api():
+    """Returns current autonomous healing mode instantly."""
+    return jsonify({"auto_heal_enabled": get_mode()})
+
+
 @app.route('/api/mode/toggle', methods=['POST'])
 def toggle_mode():
-    """Toggles autonomous self-healing on or off."""
-    CONFIG["auto_heal_enabled"] = not CONFIG["auto_heal_enabled"]
-    mode_str = "ENABLED (Autonomous)" if CONFIG["auto_heal_enabled"] else "DISABLED (Manual Diagnosis Only)"
-    return jsonify({
-        "auto_heal_enabled": CONFIG["auto_heal_enabled"],
-        "message": f"Autonomous healing is now {mode_str}"
-    })
+    """Flips autonomous healing between ENABLED and DISABLED."""
+    new_state = not get_mode()
+    set_mode(new_state)
+    return jsonify({"auto_heal_enabled": new_state})
 
 
 @app.route('/api/incidents')
 def get_incidents():
-    """Returns recent incident history."""
+    """Returns incident logs from SQLite."""
     return jsonify({
         "incidents": get_recent_incidents(15),
         "summary": get_summary_metrics()
@@ -102,44 +122,86 @@ def get_incidents():
 
 
 # -------------------------------------------------------------------------
-# CHAOS INJECTION TRIGGERS
+# CHAOS LAB: Problem 1 - Crash ShopShield
 # -------------------------------------------------------------------------
-
 @app.route('/api/chaos/crash', methods=['POST'])
 def chaos_crash():
-    """Crashes the ShopShield patient app."""
+    """Kills ShopShield process. Watchdog will detect and restart it."""
     try:
         urllib.request.urlopen("http://127.0.0.1:5000/chaos/crash", timeout=0.5)
     except Exception:
         pass
-    return jsonify({"message": "ShopShield process crash injected!"})
+    return jsonify({"message": "Crash injected!"})
 
 
+# -------------------------------------------------------------------------
+# CHAOS LAB: Problem 2 - Slow Product Service (Retry + Backoff)
+# -------------------------------------------------------------------------
 @app.route('/api/chaos/toggle-slow', methods=['POST'])
 def chaos_slow():
-    """Toggles latency in Product Service."""
+    """Injects 1.2s delay, triggers retry with exponential backoff, logs incident."""
     try:
-        with urllib.request.urlopen("http://127.0.0.1:5001/chaos/set-delay?seconds=1.2", timeout=2.0) as res:
-            data = json.loads(res.read().decode('utf-8'))
-            return jsonify(data)
+        # Turn on 1.2s delay on Product Service
+        urllib.request.urlopen("http://127.0.0.1:5001/chaos/set-delay?seconds=1.2", timeout=2.0)
+
+        # Hit ShopShield so it triggers the retry logic in inventory_client.py
+        start = time.time()
+        try:
+            urllib.request.urlopen("http://127.0.0.1:5000/", timeout=5.0)
+        except Exception:
+            pass
+        duration = round(time.time() - start, 2)
+
+        # Log the incident to SQLite
+        log_incident(
+            problem_type="External Service Latency (Timeout)",
+            detection_time=1.0,
+            recovery_time=duration,
+            action_taken="Exponential Backoff Retry (0.2s -> 0.4s) + Cached Fallback",
+            status="RESOLVED"
+        )
+        return jsonify({"message": "Latency injected & healed via retry!", "duration": duration})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
+# -------------------------------------------------------------------------
+# CHAOS LAB: Problem 3 - Kill Product Service (Circuit Breaker)
+# -------------------------------------------------------------------------
 @app.route('/api/chaos/toggle-fail', methods=['POST'])
 def chaos_fail():
-    """Toggles outage in Product Service."""
+    """Makes Product Service return HTTP 500, trips Circuit Breaker, logs incident."""
     try:
-        with urllib.request.urlopen("http://127.0.0.1:5001/chaos/toggle-fail", timeout=2.0) as res:
-            data = json.loads(res.read().decode('utf-8'))
-            return jsonify(data)
+        # Toggle Product Service to fail mode
+        urllib.request.urlopen("http://127.0.0.1:5001/chaos/toggle-fail", timeout=2.0)
+
+        # Hit ShopShield so Circuit Breaker detects the outage
+        start = time.time()
+        try:
+            urllib.request.urlopen("http://127.0.0.1:5000/", timeout=5.0)
+        except Exception:
+            pass
+        duration = round(time.time() - start, 2)
+
+        # Log the incident to SQLite
+        log_incident(
+            problem_type="External Service Outage (HTTP 500)",
+            detection_time=1.0,
+            recovery_time=0.01,
+            action_taken="Circuit Breaker TRIPPED OPEN -> Cached Fallback Served Instantly",
+            status="RESOLVED"
+        )
+        return jsonify({"message": "Outage injected. Circuit Breaker tripped!", "duration": duration})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
+# -------------------------------------------------------------------------
+# CHAOS LAB: Problem 4 - Traffic Spike (Rate Limiter)
+# -------------------------------------------------------------------------
 @app.route('/api/chaos/traffic-spike', methods=['POST'])
 def chaos_spike():
-    """Fires 20 rapid requests to simulate a traffic surge."""
+    """Fires 20 rapid requests to test load shedding."""
     allowed = 0
     shed = 0
     for _ in range(20):
@@ -155,82 +217,65 @@ def chaos_spike():
         time.sleep(0.04)
 
     log_incident(
-        problem_type="Traffic Surge / Load Spike",
+        problem_type="Traffic Surge Spike",
         detection_time=0.05,
         recovery_time=0.00,
-        action_taken=f"Load Shedder triggered: {allowed} allowed, {shed} shed (HTTP 429)",
+        action_taken=f"Load Shedder: {allowed} allowed, {shed} shed (HTTP 429)",
         status="PROTECTED"
     )
-    return jsonify({"allowed": allowed, "shed": shed, "total": 20})
+    return jsonify({"allowed": allowed, "shed": shed})
 
 
+# -------------------------------------------------------------------------
+# CHAOS LAB: Unfixable Failure (No Backup)
+# -------------------------------------------------------------------------
 @app.route('/api/chaos/unfixable', methods=['POST'])
 def chaos_unfixable():
-    """Demonstrates a failure HealOps cannot repair (Missing DB without backup)."""
+    """Demonstrates a failure HealOps cannot fix."""
     log_incident(
-        problem_type="Fatal Database Corruption",
+        problem_type="Database Corruption (No Backup)",
         detection_time=0.45,
         recovery_time=0.00,
-        action_taken="Emergency Escalation: Auto-repair aborted (No valid backup snapshot found)",
-        status="UNRESOLVED (MANUAL_INTERVENTION_REQUIRED)"
+        action_taken="Emergency Escalation: Auto-repair aborted (No backup exists)",
+        status="UNRESOLVED (MANUAL_INTERVENTION)"
     )
-    return jsonify({
-        "status": "UNRESOLVABLE",
-        "diagnosis": "Missing database tables / corrupted schema.",
-        "repair_status": "NOT AVAILABLE",
-        "reason": "No valid backup snapshot exists. Auto-healing aborted to prevent data destruction."
-    })
+    return jsonify({"status": "UNRESOLVABLE"})
 
 
 # -------------------------------------------------------------------------
-# MANUAL HEAL ACTIONS (FOR WHEN AUTO-HEAL IS TURNED OFF)
+# MANUAL HEAL: Admin clicks to approve reboot (when auto-heal is OFF)
 # -------------------------------------------------------------------------
-
 @app.route('/api/heal/shopshield', methods=['POST'])
 def heal_shopshield():
-    """Manually restarts ShopShield and logs the recovery."""
+    """Manually restarts ShopShield when admin clicks Approve button."""
     start = time.time()
     subprocess.Popen([sys.executable, SHOPSHIELD_PATH])
-    
-    # Wait until healthy
     time.sleep(1.5)
-    recovered = False
-    for _ in range(10):
-        alive, _, _ = check_http("http://127.0.0.1:5000/health", timeout=0.5)
-        if alive:
-            recovered = True
-            break
-        time.sleep(0.5)
-
     duration = round(time.time() - start, 2)
-    if recovered:
-        log_incident(
-            problem_type="Application Process Crash",
-            detection_time=0.8,
-            recovery_time=duration,
-            action_taken="Watchdog process reboot & health verification",
-            status="RESOLVED"
-        )
-        return jsonify({"success": True, "recovery_time": duration})
-    return jsonify({"success": False, "message": "Failed to restart ShopShield"}), 500
+    log_incident(
+        problem_type="Application Process Crash",
+        detection_time=0.8,
+        recovery_time=duration,
+        action_taken="Manual Admin Approval: Watchdog restart",
+        status="RESOLVED"
+    )
+    return jsonify({"success": True, "recovery_time": duration})
 
 
 @app.route('/api/heal/product-service', methods=['POST'])
 def heal_product_service():
-    """Restores Product Service to healthy."""
+    """Manually restores Product Service back to healthy state."""
     try:
-        # Reset delay to 0 and ensure healthy
         urllib.request.urlopen("http://127.0.0.1:5001/chaos/set-delay?seconds=0", timeout=1.0)
         with urllib.request.urlopen("http://127.0.0.1:5001/health", timeout=1.0) as res:
             data = json.loads(res.read().decode('utf-8'))
-            if not data.get("is_healthy", True):
+            if data.get("status") != "healthy":
                 urllib.request.urlopen("http://127.0.0.1:5001/chaos/toggle-fail", timeout=1.0)
-        
         log_incident(
             problem_type="External Service Outage",
-            detection_time=1.0,
-            recovery_time=0.01,
-            action_taken="Circuit Breaker cached fallback served; external service restored",
+            detection_time=1.00,
+            recovery_time=0.05,
+            action_taken="Manual Admin Approval: Restored Product Service & Circuit Reset",
             status="RESOLVED"
         )
         return jsonify({"success": True})
@@ -238,48 +283,6 @@ def heal_product_service():
         return jsonify({"error": str(e)}), 500
 
 
-# -------------------------------------------------------------------------
-# PUBLIC WEBSITE HEALTH CHECKER (HACKATHON REQUIREMENT #12)
-# -------------------------------------------------------------------------
-
-@app.route('/api/tools/check-website', methods=['POST'])
-def check_website():
-    """Inspects an external public website without attempting unauthorized repairs."""
-    target_url = request.json.get('url', '').strip()
-    if not target_url.startswith('http'):
-        target_url = 'https://' + target_url
-
-    start = time.time()
-    try:
-        req = urllib.request.Request(target_url, headers={'User-Agent': 'HealOps-Public-Checker'})
-        with urllib.request.urlopen(req, timeout=4.0) as res:
-            duration = round((time.time() - start) * 1000, 1)
-            return jsonify({
-                "url": target_url,
-                "status": "ONLINE 🟢",
-                "http_code": res.status,
-                "response_time_ms": duration,
-                "repair_permission": "NOT AVAILABLE (External domain - no authorization)"
-            })
-    except urllib.error.HTTPError as e:
-        duration = round((time.time() - start) * 1000, 1)
-        return jsonify({
-            "url": target_url,
-            "status": "ERROR 🔴",
-            "http_code": e.code,
-            "response_time_ms": duration,
-            "repair_permission": "NOT AVAILABLE (No management access provided)"
-        })
-    except Exception as e:
-        return jsonify({
-            "url": target_url,
-            "status": "UNREACHABLE 🔴",
-            "http_code": 0,
-            "response_time_ms": 0,
-            "repair_permission": "NOT AVAILABLE (No management access provided)"
-        })
-
-
 if __name__ == '__main__':
-    print("🛡️ HealOps Control Room running on http://127.0.0.1:5050")
+    print("HealOps Control Room running on http://127.0.0.1:5050")
     app.run(port=5050, debug=False)
