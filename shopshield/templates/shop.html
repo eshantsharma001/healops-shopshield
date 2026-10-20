@@ -1,172 +1,547 @@
-
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <title>ShopShield Storefront</title>
-</head>
-<body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ShopShield Storefront — Protected by HealOps</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
     <nav class="navbar">
-        <div class="nav-logo"><a href="/">ShopShield</a></div>
-        <form action="/" method="GET" class="nav-search">
-            <!-- Retain current active category during a search query -->
-            {% if request.args.get('category') %}
-                <input type="hidden" name="category" value="{{ request.args.get('category') }}">
-            {% endif %}
-            <input type="text" name="search" placeholder="Search products..." value="{{ request.args.get('search', '') }}">
-            <button type="submit">Search</button>
-        </form>
-        <ul class="nav-links">
-            <li><a href="/">Shop</a></li>
-            <li><a href="#" id="cart-nav-link" class="nav-icon">🛒 Cart <span class="cart-count" id="cart-badge">0</span></a></li>
-        </ul>
+      <div class="nav-logo"><a href="/">ShopShield</a></div>
+      <form action="/" method="GET" class="nav-search">
+        {% if request.args.get('category') %}
+        <input type="hidden" name="category" value="{{ request.args.get('category') }}" />
+        {% endif %}
+        <input type="text" name="search" placeholder="Search products..." value="{{ request.args.get('search', '') }}" />
+        <button type="submit">Search</button>
+      </form>
+      <ul class="nav-links">
+        <li><a href="/">Shop</a></li>
+        <li>
+          {% if current_user %}
+          <div class="account-menu">
+            <button class="account-trigger" id="account-trigger" aria-expanded="false">👤 Hi, {{ current_user.username }}</button>
+            <div class="account-dropdown" id="account-dropdown">
+              <button type="button" id="my-orders-btn">My Orders</button>
+              <button type="button" id="logout-btn">Logout</button>
+            </div>
+          </div>
+          {% else %}
+          <button class="sign-in-trigger" id="sign-in-trigger">👤 Sign In</button>
+          {% endif %}
+        </li>
+        <li><a href="#" id="cart-nav-link" class="nav-icon">🛒 Cart <span class="cart-count" id="cart-badge">0</span></a></li>
+      </ul>
     </nav>
-  
+
     <main class="store-container">
-        <header class="hero-banner">
-            <div class="hero-content">
-                <h2>Secure Your Shopping Experience</h2>
-                <p>Discover top-tier tech products verified by ShopShield safety protocols.</p>
-                <a href="#products" class="btn-primary">Shop Now</a>
-            </div>
-        </header>
-
-        <!-- DYNAMIC CATEGORY PILL FILTER BAR -->
-        <div class="category-container">
-            <a href="/" class="category-pill {% if not request.args.get('category') %}active-pill{% endif %}">All Items</a>
-            {% for cat in ['Laptops', 'Mobiles', 'Sports', 'Fitness', 'Books', 'Supplements'] %}
-                <a href="/?category={{ cat }}{% if request.args.get('search') %}&search={{ request.args.get('search') }}{% endif %}" 
-                   class="category-pill {% if request.args.get('category') == cat %}active-pill{% endif %}">
-                    {{ cat }}
-                </a>
-            {% endfor %}
+      <header class="hero-banner">
+        <div class="hero-content">
+          <h2>Secure Your Shopping Experience</h2>
+          <p>Discover top-tier products verified by ShopShield &amp; HealOps resilience protocols.</p>
+          <a href="#products" class="btn-primary">Shop Now</a>
         </div>
+      </header>
 
-        <section id="products" class="product-section">
-            <h3>
-                {% if request.args.get('search') %}
-                    Search Results for "{{ request.args.get('search') }}"
-                {% elif request.args.get('category') %}
-                    Browsing Category: {{ request.args.get('category') }}
-                {% else %}
-                    Featured Products
+      <div class="category-container">
+        <a href="/" class="category-pill {% if not request.args.get('category') %}active-pill{% endif %}">All Items</a>
+        {% for cat in categories %}
+        <a href="/?category={{ cat|urlencode }}{% if request.args.get('search') %}&amp;search={{ request.args.get('search')|urlencode }}{% endif %}"
+           class="category-pill {% if request.args.get('category') == cat %}active-pill{% endif %}">{{ cat }}</a>
+        {% endfor %}
+      </div>
+
+      <section id="products" class="product-section">
+        <h3>
+          {% if request.args.get('search') %}Search Results for "{{ request.args.get('search') }}"
+          {% elif request.args.get('category') %}Browsing Category: {{ request.args.get('category') }}
+          {% else %}Featured Products{% endif %}
+        </h3>
+        <div class="product-grid">
+          {% if products %}
+            {% for product in products %}
+            <article class="product-card">
+              <div class="product-image-container">
+                <img src="{{ url_for('static', filename='uploads/' + product.image_filename) }}" alt="{{ product.name }}" />
+                {% if product.live_stock is number and product.live_stock <= 3 %}
+                <span class="stock-badge {% if product.live_stock == 0 %}sold-out{% endif %}">{{ product.live_status }}</span>
                 {% endif %}
-            </h3>
-            
-            <div class="product-grid">
-                {% if products %}
-                    {% for product in products %}
-                        <div class="product-card">
-                            <div class="product-image-container" style="height: 200px; overflow: hidden; background: #f7fafc; display: flex; align-items: center; justify-content: center;">
-                                <img src="{{ url_for('static', filename='uploads/' + product.image_filename) }}" alt="{{ product.name }}" style="max-width: 100%; max-height: 100%; object-fit: contain;">
-                            </div>
-                            <div class="product-info">
-                                <span class="product-badge">{{ product.badge }}</span>
-                                <h4>{{ product.name }}</h4>
-                                <p class="product-price">\${{ product.price }}</p>
-                                <button class="btn-add-cart add-to-cart-btn" 
-                                        data-id="{{ product.id }}" 
-                                        data-name="{{ product.name }}" 
-                                        data-price="{{ product.price }}">
-                                    Add to Cart
-                                </button>
-                            </div>
-                        </div>
-                    {% endfor %}
-                {% else %}
-                    <p style="color: #666; grid-column: 1 / -1; text-align: center; padding: 40px; border: 2px dashed #ccc; border-radius: 8px;">
-                        No products match your current filtering selections. <a href="/" style="color: #0071dc; font-weight: bold; text-decoration: underline;">Clear all filters</a>
-                    </p>
-                {% endif %}
-            </div>
-        </section>
+              </div>
+              <div class="product-info">
+                <span class="product-badge">{{ product.badge }}</span>
+                <h4>{{ product.name }}</h4>
+                <div class="product-rating" aria-label="Rated 4.9 out of 5">★★★★★ <span>4.9 · Verified</span></div>
+                <p class="product-price">{{ product.price|inr }}</p>
+                <p class="product-stock {% if product.live_status == 'Out of Stock' %}out-of-stock{% endif %}">
+                  📦 <span id="stock-count-{{ product.id }}">{{ product.live_stock }}</span>
+                  <span id="stock-status-{{ product.id }}">{{ product.live_status }}</span>
+                  {% if product.stock_source == "CACHED" %}<span class="cached-label">Cached fallback</span>{% endif %}
+                </p>
+                <div class="product-actions">
+                  <button class="btn-buy-now buy-now-btn" data-id="{{ product.id }}" data-name="{{ product.name }}"
+                    data-price="{{ product.price }}" {% if product.live_stock is number and product.live_stock == 0 %}disabled{% endif %}>⚡ Buy Now</button>
+                  <button class="btn-add-cart add-to-cart-btn" data-id="{{ product.id }}" data-name="{{ product.name }}"
+                    data-price="{{ product.price }}" {% if product.live_stock is number and product.live_stock == 0 %}disabled{% endif %}>🛒 Add to Cart</button>
+                </div>
+              </div>
+            </article>
+            {% endfor %}
+          {% else %}
+          <p class="empty-products">
+            No products match your current selections.
+            <a href="/">Clear filters</a>
+          </p>
+          {% endif %}
+        </div>
+      </section>
     </main>
 
-    <!-- SHOPPING CART SLIDE-OUT DRAWER -->
     <div id="cart-modal" class="cart-modal">
-        <div class="cart-modal-content">
-            <div class="cart-modal-header">
-                <h3>Your Shopping Cart</h3>
-                <span id="close-cart-btn" class="close-cart">&times;</span>
-            </div>
-            <div id="cart-items-container" class="cart-items-container"></div>
-            <div class="cart-modal-footer">
-                <div class="cart-total-row"><span>Total:</span><span id="cart-total-price">\$0.00</span></div>
-                <button class="btn-checkout" onclick="alert('Checkout coming soon!')">Proceed to Checkout</button>
-            </div>
+      <section class="cart-modal-content" aria-label="Shopping cart">
+        <div class="cart-modal-header">
+          <h3>Your Shopping Cart</h3>
+          <button id="close-cart-btn" class="close-cart" aria-label="Close cart">&times;</button>
         </div>
+        <div id="cart-items-container" class="cart-items-container"></div>
+        <div class="cart-modal-footer">
+          <div class="cart-total-row"><span>Total:</span><span id="cart-total-price">₹0.00</span></div>
+          <button class="btn-checkout" id="proceed-checkout-btn">Proceed to Checkout</button>
+        </div>
+      </section>
     </div>
 
-    <!-- JavaScript Cart Engine -->
+    <div id="checkout-modal" class="checkout-modal">
+      <section class="checkout-content" aria-labelledby="checkout-heading">
+        <div id="checkout-form-container">
+          <div class="modal-heading">
+            <div class="checkout-title">
+              <span class="checkout-eyebrow">SHOPSHIELD RETAIL</span>
+              <h3 id="checkout-heading">Secure checkout</h3>
+              <p>Your items are reserved while you complete checkout.</p>
+            </div>
+            <button type="button" id="close-checkout-btn" class="modal-close" aria-label="Close checkout">&times;</button>
+          </div>
+          <div class="checkout-total">
+            <span><small>ORDER TOTAL</small><strong id="checkout-order-total">₹0.00</strong></span>
+            <span class="secure-checkout-label">🔒 Secure checkout</span>
+          </div>
+          <form id="checkout-form">
+            <div class="checkout-section">
+              <div class="section-heading"><span>1</span><div><h4>Delivery details</h4><p>Where should we send your order?</p></div></div>
+              <div class="checkout-address-grid">
+                <div class="form-group">
+                  <label for="customer-name">Full name</label>
+                  <input id="customer-name" name="customer_name" type="text" autocomplete="name" maxlength="120" placeholder="Name on the delivery" required />
+                </div>
+                <div class="form-group checkout-address">
+                  <label for="shipping-address">Street address</label>
+                  <input id="shipping-address" name="address" type="text" autocomplete="street-address" maxlength="300" placeholder="House, street, area" required />
+                </div>
+                <div class="form-group">
+                  <label for="city-postal">City &amp; postal code</label>
+                  <input id="city-postal" name="city_postal" type="text" autocomplete="postal-code" maxlength="120" placeholder="e.g. Mumbai, 400001" required />
+                </div>
+              </div>
+            </div>
+
+            <fieldset class="payment-fieldset">
+              <legend><span class="section-number">2</span><span><strong>Payment method</strong><small>Choose how you’d like to pay.</small></span></legend>
+              <div class="payment-options">
+                <button type="button" class="payment-option active" data-method="upi" aria-pressed="true"><span class="payment-icon">▦</span><span><strong>UPI / QR</strong><small>Pay by any UPI app</small></span></button>
+                <button type="button" class="payment-option" data-method="card" aria-pressed="false"><span class="payment-icon">▤</span><span><strong>Card / NetBanking</strong><small>Provider required</small></span></button>
+                <button type="button" class="payment-option" data-method="cod" aria-pressed="false"><span class="payment-icon">₹</span><span><strong>Cash on Delivery</strong><small>Pay when delivered</small></span></button>
+              </div>
+              <div id="upi-panel" class="upi-panel">
+                <div class="upi-heading"><span class="upi-live-dot"></span><span>SCAN &amp; PAY</span><strong id="upi-amount">₹0.00</strong><small>to ShopShield Retail</small></div>
+                <div class="upi-qr-wrap">
+                  <img id="upi-qr" alt="ShopShield UPI payment QR code" hidden />
+                  <p id="upi-qr-placeholder"><span>▦</span>UPI QR appears here<br /><small>Configure the store UPI ID to enable payments.</small></p>
+                </div>
+                <div class="upi-payment-details">
+                  <p class="payment-caption">Open any UPI app to scan and pay. Then enter the 12-digit reference number below.</p>
+                  <div class="payment-badges"><span>G Pay</span><span>PhonePe</span><span>Paytm</span></div>
+                  <p class="payment-caption payment-disclaimer">Payment reference is recorded for reconciliation; payment settlement is not verified here.</p>
+                </div>
+                <div class="form-group">
+                  <label for="payment-reference">UPI reference number / UTR</label>
+                  <input id="payment-reference" name="payment_reference" inputmode="numeric" autocomplete="off"
+                    pattern="[0-9]{12}" maxlength="12" placeholder="e.g. 392817482910" />
+                </div>
+                {% if not upi_id %}<p class="setup-notice">UPI payments are not enabled yet. You can select Cash on Delivery.</p>{% endif %}
+              </div>
+              <div id="card-panel" class="payment-notice" hidden>
+                Card / NetBanking requires a payment-provider integration. Choose UPI or Cash on Delivery to place this order.
+              </div>
+              <div id="cod-panel" class="payment-notice" hidden>
+                Pay the delivery partner when your order arrives. No online payment reference is required.
+              </div>
+            </fieldset>
+            <p id="checkout-error" class="form-error" role="alert"></p>
+            <button type="submit" class="btn-checkout confirm-order-btn" id="confirm-order-btn">🔒 Confirm &amp; Pay</button>
+          </form>
+        </div>
+
+        <div id="order-confirmed-box" class="order-confirmed-box" hidden>
+          <div class="confirmation-heading"><span>✓</span><h3>Order received</h3></div>
+          <p class="confirmation-copy">Your order is recorded. Keep this invoice for your records.</p>
+          <div id="order-invoice" class="invoice"></div>
+          <div class="invoice-actions">
+            <button class="btn-outline" type="button" id="print-invoice-btn">Print invoice</button>
+            <button class="btn-checkout" type="button" id="continue-shopping-btn">Continue shopping</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div id="auth-modal" class="checkout-modal">
+      <section class="checkout-content auth-content" aria-labelledby="auth-heading">
+        <div class="auth-brand">
+          <span class="auth-brand-mark" aria-hidden="true">S</span>
+          <span class="auth-brand-name">SHOPSHIELD</span>
+        </div>
+        <button type="button" class="modal-close auth-close" aria-label="Close sign in">&times;</button>
+        <div class="auth-intro">
+          <span class="auth-eyebrow">YOUR EVERYDAY, PROTECTED</span>
+          <h3 id="auth-heading">Welcome back</h3>
+          <p>Sign in for a smoother, safer shopping experience.</p>
+        </div>
+        <div class="auth-switch" role="tablist" aria-label="Account access">
+          <button type="button" class="active" data-auth-mode="login" role="tab" aria-selected="true">Sign In</button>
+          <button type="button" data-auth-mode="register" role="tab" aria-selected="false">Create Account</button>
+        </div>
+        <div class="auth-form-wrap">
+        <form id="auth-form">
+          <div id="username-group" class="form-group" hidden>
+            <label for="auth-username">Username</label>
+            <input id="auth-username" name="username" minlength="3" maxlength="30" autocomplete="username" />
+          </div>
+          <div id="email-group" class="form-group" hidden>
+            <label for="auth-email">Email address</label>
+            <input id="auth-email" name="email" type="email" maxlength="254" autocomplete="email" />
+          </div>
+          <div id="identifier-group" class="form-group">
+            <label for="auth-identifier">Username or email</label>
+            <input id="auth-identifier" name="identifier" autocomplete="username" required />
+          </div>
+          <div class="form-group">
+            <label for="auth-password">Password</label>
+            <input id="auth-password" name="password" type="password" minlength="8" autocomplete="current-password" required />
+          </div>
+          <p id="auth-error" class="form-error" role="alert"></p>
+          <button id="auth-submit" class="btn-checkout" type="submit">Sign In</button>
+        </form>
+        <p class="auth-security-note"><span>🔒</span> Your account details are securely protected.</p>
+        </div>
+      </section>
+    </div>
+
+    <div id="orders-modal" class="checkout-modal">
+      <section class="checkout-content orders-content" aria-labelledby="orders-heading">
+        <div class="modal-heading">
+          <h3 id="orders-heading">My Orders</h3>
+          <button type="button" class="modal-close orders-close" aria-label="Close orders">&times;</button>
+        </div>
+        <div id="orders-list" class="orders-list"></div>
+      </section>
+    </div>
+
     <script>
-        let cart = JSON.parse(localStorage.getItem('shopshield_cart')) || [];
-        const cartModal = document.getElementById('cart-modal');
-        const cartNavLink = document.getElementById('cart-nav-link');
-        const closeCartBtn = document.getElementById('close-cart-btn');
-        const cartBadge = document.getElementById('cart-badge');
-        const cartItemsContainer = document.getElementById('cart-items-container');
-        const cartTotalPrice = document.getElementById('cart-total-price');
+      const UPI_CONFIGURED = {{ 'true' if upi_id else 'false' }};
+      const cartModal = document.getElementById("cart-modal");
+      const checkoutModal = document.getElementById("checkout-modal");
+      const authModal = document.getElementById("auth-modal");
+      const ordersModal = document.getElementById("orders-modal");
+      const cartItemsContainer = document.getElementById("cart-items-container");
+      const cartTotalPrice = document.getElementById("cart-total-price");
+      const cartBadge = document.getElementById("cart-badge");
+      const checkoutError = document.getElementById("checkout-error");
+      const currency = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 });
+      let cart = [];
+      try {
+        const storedCart = JSON.parse(localStorage.getItem("shopshield_cart") || "[]");
+        if (Array.isArray(storedCart)) cart = storedCart.filter(item => item && Number.isInteger(Number(item.id)) && Number.isInteger(Number(item.quantity)) && Number(item.quantity) > 0);
+      } catch (error) {
+        console.error("Could not read the saved cart.", error);
+      }
+      let paymentMethod = "upi";
+      let authMode = "login";
+      let quotedTotal = null;
 
-        cartNavLink.addEventListener('click', (e) => { e.preventDefault(); cartModal.classList.add('active'); renderCart(); });
-        closeCartBtn.addEventListener('click', () => { cartModal.classList.remove('active'); });
-
-        document.querySelectorAll('.add-to-cart-btn').forEach(button => {
-            button.addEventListener('click', () => {
-                const id = button.getAttribute('data-id');
-                const name = button.getAttribute('data-name');
-                const price = parseFloat(button.getAttribute('data-price'));
-                const existingItem = cart.find(item => item.id === id);
-                if (existingItem) existingItem.quantity += 1;
-                else cart.push({ id, name, price, quantity: 1 });
-                saveAndRefreshCart();
-            });
+      function money(value) {
+        return currency.format(Number(value) || 0);
+      }
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+      }
+      function persistCart() {
+        localStorage.setItem("shopshield_cart", JSON.stringify(cart));
+        cartBadge.textContent = cart.reduce((sum, item) => sum + Number(item.quantity), 0);
+        if (cartModal.classList.contains("active")) renderCart();
+      }
+      function renderCart() {
+        cartItemsContainer.replaceChildren();
+        if (!cart.length) {
+          cartItemsContainer.innerHTML = '<p class="empty-cart-msg">Your cart is empty.</p>';
+          cartTotalPrice.textContent = money(0);
+          return;
+        }
+        cart.forEach(item => {
+          const row = document.createElement("div");
+          row.className = "cart-item-row";
+          row.innerHTML = `<div class="cart-item-info"><h4>${escapeHtml(item.name)}</h4><p>${money(item.price)}</p></div>
+            <div class="cart-item-actions"><button type="button" aria-label="Decrease quantity" onclick="changeQuantity('${escapeHtml(item.id)}', -1)">−</button>
+            <span>${Number(item.quantity)}</span><button type="button" aria-label="Increase quantity" onclick="changeQuantity('${escapeHtml(item.id)}', 1)">+</button></div>`;
+          cartItemsContainer.appendChild(row);
         });
+        cartTotalPrice.textContent = money(cart.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0));
+      }
+      function changeQuantity(id, difference) {
+        const item = cart.find(entry => String(entry.id) === String(id));
+        if (!item) return;
+        item.quantity = Number(item.quantity) + difference;
+        if (item.quantity <= 0) cart = cart.filter(entry => String(entry.id) !== String(id));
+        persistCart();
+      }
+      window.changeQuantity = changeQuantity;
 
-        function saveAndRefreshCart() {
-            localStorage.setItem('shopshield_cart', JSON.stringify(cart));
-            updateBadge();
-            if (cartModal.classList.contains('active')) renderCart();
-        }
+      document.querySelectorAll(".add-to-cart-btn, .buy-now-btn").forEach(button => {
+        button.addEventListener("click", async () => {
+          const id = button.dataset.id;
+          const existing = cart.find(item => String(item.id) === id);
+          if (existing) existing.quantity += 1;
+          else cart.push({ id, name: button.dataset.name, price: Number(button.dataset.price), quantity: 1 });
+          persistCart();
+          if (button.classList.contains("buy-now-btn")) await openCheckout();
+        });
+      });
+      document.getElementById("cart-nav-link").addEventListener("click", event => {
+        event.preventDefault();
+        renderCart();
+        cartModal.classList.add("active");
+      });
+      document.getElementById("close-cart-btn").addEventListener("click", () => cartModal.classList.remove("active"));
+      document.getElementById("proceed-checkout-btn").addEventListener("click", async () => {
+        if (!cart.length) return;
+        cartModal.classList.remove("active");
+        await openCheckout();
+      });
+      document.getElementById("close-checkout-btn").addEventListener("click", () => checkoutModal.classList.remove("active"));
 
-        function updateBadge() {
-            cartBadge.textContent = cart.reduce((sum, item) => sum + item.quantity, 0);
+      async function openCheckout() {
+        checkoutError.textContent = "";
+        document.getElementById("checkout-form-container").hidden = false;
+        document.getElementById("order-confirmed-box").hidden = true;
+        checkoutModal.classList.add("active");
+        document.getElementById("confirm-order-btn").disabled = true;
+        try {
+          const response = await fetch("/api/orders/quote", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ items: cart.map(item => ({ id: Number(item.id), quantity: Number(item.quantity) })) })
+          });
+          const quote = await response.json();
+          if (!response.ok) throw new Error(quote.error || "Could not calculate your order total.");
+          cart = quote.items;
+          quotedTotal = Number(quote.total);
+          persistCart();
+          document.getElementById("checkout-order-total").textContent = money(quote.total);
+          document.getElementById("upi-amount").textContent = money(quote.total);
+          if (UPI_CONFIGURED) {
+            const qr = document.getElementById("upi-qr");
+            qr.src = `/api/payment/upi-qr?amount=${encodeURIComponent(Number(quote.total).toFixed(2))}`;
+            qr.hidden = false;
+            document.getElementById("upi-qr-placeholder").hidden = true;
+          }
+        } catch (error) {
+          checkoutError.textContent = error.message;
+        } finally {
+          document.getElementById("confirm-order-btn").disabled = false;
         }
+      }
 
-        function changeQuantity(id, change) {
-            const item = cart.find(item => item.id === id);
-            if (item) {
-                item.quantity += change;
-                if (item.quantity <= 0) cart = cart.filter(i => i.id !== id);
-            }
-            saveAndRefreshCart();
-        }
+      document.querySelectorAll(".payment-option").forEach(button => {
+        button.addEventListener("click", () => {
+          paymentMethod = button.dataset.method;
+          document.querySelectorAll(".payment-option").forEach(option => {
+            const active = option === button;
+            option.classList.toggle("active", active);
+            option.setAttribute("aria-pressed", String(active));
+          });
+          document.getElementById("upi-panel").hidden = paymentMethod !== "upi";
+          document.getElementById("card-panel").hidden = paymentMethod !== "card";
+          document.getElementById("cod-panel").hidden = paymentMethod !== "cod";
+          const reference = document.getElementById("payment-reference");
+          reference.required = paymentMethod === "upi";
+          document.getElementById("confirm-order-btn").textContent =
+            paymentMethod === "cod" ? "Place Cash on Delivery Order" : "🔒 Confirm & Pay";
+        });
+      });
 
-        function renderCart() {
-            cartItemsContainer.innerHTML = '';
-            if (cart.length === 0) {
-                cartItemsContainer.innerHTML = '<p class="empty-cart-msg">Your cart is empty.</p>';
-                cartTotalPrice.textContent = '\$0.00';
-                return;
-            }
-            let total = 0;
-            cart.forEach(item => {
-                total += item.price * item.quantity;
-                const row = document.createElement('div');
-                row.className = 'cart-item-row';
-                row.innerHTML = `
-                    <div class="cart-item-info"><h4>${item.name}</h4><p>$${item.price.toFixed(2)}</p></div>
-                    <div class="cart-item-actions">
-                        <button onclick="changeQuantity('${item.id}', -1)">-</button>
-                        <span>${item.quantity}</span>
-                        <button onclick="changeQuantity('${item.id}', 1)">+</button>
-                    </div>`;
-                cartItemsContainer.appendChild(row);
-            });
-            cartTotalPrice.textContent = `$${total.toFixed(2)}`;
+      document.getElementById("checkout-form").addEventListener("submit", async event => {
+        event.preventDefault();
+        checkoutError.textContent = "";
+        if (paymentMethod === "card") {
+          checkoutError.textContent = "Card / NetBanking is not available until a payment provider is configured.";
+          return;
         }
-        updateBadge();
+        if (paymentMethod === "upi" && !UPI_CONFIGURED) {
+          checkoutError.textContent = "UPI is not configured. Set SHOPSHIELD_UPI_ID or choose Cash on Delivery.";
+          return;
+        }
+        const form = new FormData(event.currentTarget);
+        const button = document.getElementById("confirm-order-btn");
+        button.disabled = true;
+        button.textContent = "⏳ Placing your order…";
+        try {
+          const response = await fetch("/api/orders", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              customer_name: form.get("customer_name"),
+              address: form.get("address"),
+              city_postal: form.get("city_postal"),
+              expected_total: quotedTotal,
+              payment_method: paymentMethod,
+              payment_reference: form.get("payment_reference"),
+              items: cart.map(item => ({ id: Number(item.id), quantity: Number(item.quantity) }))
+            })
+          });
+          const order = await response.json();
+          if (!response.ok) throw new Error(order.error || "We could not place this order.");
+          renderInvoice(order);
+          (order.stock_updates || []).forEach(update => updateStockCard(update));
+          cart = [];
+          persistCart();
+          document.getElementById("checkout-form-container").hidden = true;
+          document.getElementById("order-confirmed-box").hidden = false;
+        } catch (error) {
+          checkoutError.textContent = error.message;
+        } finally {
+          button.disabled = false;
+          button.textContent = paymentMethod === "cod" ? "Place Cash on Delivery Order" : "🔒 Confirm & Pay";
+        }
+      });
+
+      function updateStockCard(update) {
+        const count = document.getElementById(`stock-count-${update.product_id}`);
+        const status = document.getElementById(`stock-status-${update.product_id}`);
+        if (count) count.textContent = update.stock;
+        if (status) {
+          status.textContent = update.status;
+          status.closest(".product-stock").classList.toggle("out-of-stock", update.stock === 0);
+        }
+        if (update.stock === 0) {
+          document.querySelectorAll(`.product-card button[data-id="${update.product_id}"]`).forEach(button => {
+            button.disabled = true;
+            button.textContent = "Out of Stock";
+          });
+        }
+      }
+
+      function renderInvoice(order) {
+        const itemRows = order.items.map(item => `<tr><td>${escapeHtml(item.name)} × ${item.quantity}</td><td>${money(item.price * item.quantity)}</td></tr>`).join("");
+        const paymentLabel = { upi: "UPI (reference recorded; settlement not verified)", cod: "Cash on Delivery", card: "Card / NetBanking" }[order.payment_method];
+        document.getElementById("order-invoice").innerHTML = `
+          <div class="invoice-brand"><strong>ShopShield Retail</strong><span>ORDER INVOICE</span></div>
+          <dl class="invoice-meta"><div><dt>Order ID</dt><dd>${escapeHtml(order.order_id)}</dd></div>
+          <div><dt>Placed</dt><dd>${escapeHtml(new Date(order.created_at).toLocaleString("en-IN"))}</dd></div></dl>
+          <div class="invoice-address"><strong>Deliver to</strong><p>${escapeHtml(order.customer_name)}<br>${escapeHtml(order.address)}<br>${escapeHtml(order.city_postal)}</p></div>
+          <table class="invoice-items"><tbody>${itemRows}</tbody><tfoot><tr><th>Total paid / due</th><th>${money(order.total)}</th></tr></tfoot></table>
+          <dl class="invoice-meta"><div><dt>Payment</dt><dd>${escapeHtml(paymentLabel)}</dd></div>
+          <div><dt>Payment reference</dt><dd>${escapeHtml(order.payment_reference || "Not applicable")}</dd></div>
+          <div><dt>Estimated delivery</dt><dd>${escapeHtml(order.delivery_estimate)}</dd></div></dl>`;
+      }
+      document.getElementById("print-invoice-btn").addEventListener("click", () => window.print());
+      document.getElementById("continue-shopping-btn").addEventListener("click", () => {
+        checkoutModal.classList.remove("active");
+        document.getElementById("checkout-form").reset();
+      });
+
+      const signInButton = document.getElementById("sign-in-trigger");
+      if (signInButton) signInButton.addEventListener("click", () => {
+        authModal.classList.add("active");
+        setAuthMode("login");
+      });
+      document.querySelectorAll("[data-auth-mode]").forEach(button => button.addEventListener("click", () => setAuthMode(button.dataset.authMode)));
+      function setAuthMode(mode) {
+        authMode = mode;
+        const registering = mode === "register";
+        document.getElementById("auth-heading").textContent = registering ? "Create your account" : "Welcome back";
+        document.querySelector("#auth-modal .auth-intro p").textContent = registering
+          ? "Join ShopShield for a safer, more convenient checkout."
+          : "Sign in for a smoother, safer shopping experience.";
+        document.getElementById("username-group").hidden = !registering;
+        document.getElementById("email-group").hidden = !registering;
+        document.getElementById("identifier-group").hidden = registering;
+        document.getElementById("auth-username").required = registering;
+        document.getElementById("auth-email").required = registering;
+        document.getElementById("auth-identifier").required = !registering;
+        document.getElementById("auth-password").autocomplete = registering ? "new-password" : "current-password";
+        document.getElementById("auth-submit").textContent = registering ? "Create Account" : "Sign In";
+        document.querySelectorAll("[data-auth-mode]").forEach(button => {
+          const active = button.dataset.authMode === mode;
+          button.classList.toggle("active", active);
+          button.setAttribute("aria-selected", String(active));
+        });
+        document.getElementById("auth-error").textContent = "";
+      }
+      document.getElementById("auth-form").addEventListener("submit", async event => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        const payload = authMode === "register"
+          ? { username: form.get("username"), email: form.get("email"), password: form.get("password") }
+          : { identifier: form.get("identifier"), password: form.get("password") };
+        try {
+          const response = await fetch(authMode === "register" ? "/api/register" : "/api/login", {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || "Could not sign in.");
+          location.reload();
+        } catch (error) {
+          document.getElementById("auth-error").textContent = error.message;
+        }
+      });
+      document.querySelectorAll(".auth-close").forEach(button => button.addEventListener("click", () => authModal.classList.remove("active")));
+      const accountTrigger = document.getElementById("account-trigger");
+      if (accountTrigger) {
+        const dropdown = document.getElementById("account-dropdown");
+        accountTrigger.addEventListener("click", () => {
+          const expanded = accountTrigger.getAttribute("aria-expanded") === "true";
+          accountTrigger.setAttribute("aria-expanded", String(!expanded));
+          dropdown.classList.toggle("open", !expanded);
+        });
+        document.getElementById("logout-btn").addEventListener("click", async () => {
+          await fetch("/api/logout");
+          location.reload();
+        });
+        document.getElementById("my-orders-btn").addEventListener("click", async () => {
+          dropdown.classList.remove("open");
+          ordersModal.classList.add("active");
+          const list = document.getElementById("orders-list");
+          list.textContent = "Loading your orders…";
+          try {
+            const response = await fetch("/api/orders");
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || "Could not load orders.");
+            list.innerHTML = result.orders.length ? result.orders.map(order =>
+              `<article class="order-summary"><strong>${escapeHtml(order.order_id)}</strong><span>${money(order.total)}</span>
+                <small>${escapeHtml(order.created_at.slice(0, 10))} · Delivery ${escapeHtml(order.delivery_estimate)}</small></article>`
+            ).join("") : '<p class="empty-cart-msg">No orders yet. Your first order will appear here.</p>';
+          } catch (error) {
+            list.textContent = error.message;
+          }
+        });
+      }
+      document.querySelectorAll(".orders-close").forEach(button => button.addEventListener("click", () => ordersModal.classList.remove("active")));
+      [cartModal, checkoutModal, authModal, ordersModal].forEach(modal => modal.addEventListener("click", event => {
+        if (event.target === modal) modal.classList.remove("active");
+      }));
+      persistCart();
+      if (new URLSearchParams(location.search).get("checkout") === "1") {
+        history.replaceState(null, "", location.pathname);
+        if (cart.length) openCheckout();
+      }
     </script>
-</body>
+  </body>
 </html>
