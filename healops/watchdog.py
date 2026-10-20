@@ -16,17 +16,13 @@ if sys.platform == "win32":
         pass
 
 #step 2 - configuration 
-# 
-# The healthcheck URL for shopshield 
 SHOPSHIELD_HEALTH_URL = "http://127.0.0.1:5000/health"
-
-#how often to check if shopshield is alive (in seconds)
 CHECK_INTERVAL_SECONDS = 1.0
 
-#path to shopshield app.py file
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
 SHOPSHIELD_PATH = os.path.join(PROJECT_ROOT, "shopshield", "app.py")
+MODE_FILE = os.path.join(CURRENT_DIR, "mode.json")
 
 #var to hold our running shopshield process
 shopshiel_process = None
@@ -37,12 +33,7 @@ def start_shopshield():
     global shopshiel_process
 
     print("\n[WATCHDOG ACTION] Starting ShopShield application...")
-
-    #sys.executable uses the exact same python.exe from my virtual env
-    #subprocess.Popen runs it in the background without blocking this script
     shopshiel_process = subprocess.Popen([sys.executable, SHOPSHIELD_PATH])
-
-    #give the server 1.5 sec to bind to port 5000
     time.sleep(1.5)
     print(f"[WATCHDOG ACTION] 🚀 Shopshield launched with Process ID (PID): {shopshiel_process.pid}")
 
@@ -50,23 +41,31 @@ def start_shopshield():
 def is_shopshiel_healthy():
     """Sends an HTTP GET req to /health. returns true if alive else false if down"""
     try:
-        #send a req with a short 1-sec timeout
         with urllib.request.urlopen(SHOPSHIELD_HEALTH_URL, timeout=1.0) as response:
-            #if status is 200 , its alive
             return response.status == 200
     except (urllib.error.URLError, ConnectionResetError, TimeoutError, ConnectionAbortedError):
-        #if connection is refused or timed out, the app is DOWN.
         return False
 
 def is_auto_heal_enabled():
-    """Checks HealOps Dashboard to see if autonomous healing is enabled."""
+    """Checks if autonomous healing is enabled via shared mode file or fast API."""
+    # 1. Instant check from local mode.json file (0ms delay, no HTTP or port collision)
     try:
-        with urllib.request.urlopen("http://127.0.0.1:5050/api/status", timeout=0.4) as res:
-            data = json.loads(res.read().decode('utf-8'))
-            return data.get("auto_heal_enabled", True)
+        if os.path.exists(MODE_FILE):
+            with open(MODE_FILE, "r") as f:
+                data = json.load(f)
+                return bool(data.get("auto_heal_enabled", True))
     except Exception:
-        # Default to True if dashboard is not currently open
-        return True
+        pass
+
+    # 2. Fast API check to /api/mode
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:5050/api/mode", timeout=1.5) as res:
+            data = json.loads(res.read().decode('utf-8'))
+            return bool(data.get("auto_heal_enabled", True))
+    except Exception:
+        pass
+
+    return False  # If paused or unreachable, do NOT auto-restart!
 
 #step 5 the self healing supervisor loop
 def run_watchdog():
@@ -81,12 +80,10 @@ def run_watchdog():
         start_shopshield()
           
     while True:
-        # Sleep for our interval (1 second)
         time.sleep(CHECK_INTERVAL_SECONDS)
 
         #check health
         if is_shopshiel_healthy():
-            #all good ! print green heartbeat
             print("[STATUS] 🟢 Shopshield is HEALTHY", flush=True)
         else:
             #incident detected : shopshield has crashed
