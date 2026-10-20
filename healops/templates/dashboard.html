@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+    :root {
+        /* Premium Dark Theme */
+        --bg: #040811;
+        --bg-gradient: linear-gradient(145deg, #040811 0%, #0a1228 50%, #0d1530 100%);
+        --card-bg: #0d1530;
+        --card-border: rgba(99, 179, 237, 0.12);
+        --card-hover-border: rgba(99, 179, 237, 0.35);
+        --text: #e8edf5;
+        --text-dim: #8892a8;
+        --text-muted: #5a6478;
+        --accent-blue: #63b3ed;
+        --accent-cyan: #4fd1c5;
+        --accent-purple: #b794f6;
+        --accent-pink: #f687b3;
+        --accent-teal: #4fd1c5;
+        --success: #48bb78;
+        --warning: #ecc94b;
+        --danger: #fc8181;
+        --glow-blue: rgba(99, 179, 237, 0.15);
+        --glow-purple: rgba(183, 148, 246, 0.15);
+        --glow-teal: rgba(79, 209, 197, 0.15);
+    }
+
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+        background: var(--bg-gradient);
+        color: var(--text);
+        padding: 24px;
+        min-height: 100vh;
+    }
+
+    /* Subtle background mesh */
+    body::before {
+        content: '';
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background:
+            radial-gradient(ellipse 600px 400px at 20% 20%, rgba(99, 179, 237, 0.04) 0%, transparent 70%),
+            radial-gradient(ellipse 500px 500px at 80% 80%, rgba(183, 148, 246, 0.04) 0%, transparent 70%),
+            radial-gradient(ellipse 400px 300px at 50% 50%, rgba(79, 209, 197, 0.03) 0%, transparent 70%);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    body > * {
+        position: relative;
+        z-index: 1;
+    }
+
+    .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--card-border);
+        padding-bottom: 18px;
+        margin-bottom: 24px;
+    }
+
+    .toggle-btn {
+        padding: 10px 18px;
+        border-radius: 8px;
+        font-weight: 700;
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: all 0.25s ease;
+    }
+
+    .toggle-btn:hover {
+        transform: translateY(-1px);
+    }
+
+    .auto-on {
+        background: linear-gradient(135deg, rgba(72, 187, 120, 0.15) 0%, rgba(79, 209, 197, 0.1) 100%);
+        color: #6ee7b7;
+        border-color: rgba(72, 187, 120, 0.4);
+        box-shadow: 0 0 16px rgba(72, 187, 120, 0.1);
+    }
+
+    .auto-off {
+        background: linear-gradient(135deg, rgba(236, 201, 75, 0.12) 0%, rgba(246, 135, 179, 0.1) 100%);
+        color: #ecc94b;
+        border-color: rgba(236, 201, 75, 0.4);
+        box-shadow: 0 0 16px rgba(236, 201, 75, 0.08);
+    }
+
+    .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .card {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 14px;
+        padding: 22px;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+
+    /* Top accent stripe on each card */
+    .card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 3px;
+        border-radius: 14px 14px 0 0;
+    }
+
+    .card:nth-child(4n+1)::before {
+        background: linear-gradient(90deg, var(--accent-blue), var(--accent-cyan));
+    }
+    .card:nth-child(4n+2)::before {
+        background: linear-gradient(90deg, var(--accent-purple), var(--accent-pink));
+    }
+    .card:nth-child(4n+3)::before {
+        background: linear-gradient(90deg, var(--success), var(--accent-teal));
+    }
+    .card:nth-child(4n+4)::before {
+        background: linear-gradient(90deg, var(--warning), var(--accent-blue));
+    }
+
+    .card:hover {
+        border-color: var(--card-hover-border);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 24px var(--glow-blue);
+        transform: translateY(-2px);
+    }
+
+    .card h4 {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: var(--text-dim);
+        font-weight: 600;
+    }
+
+    .card .val {
+        font-size: 26px;
+        font-weight: 700;
+        margin: 10px 0 4px;
+        background: linear-gradient(135deg, var(--text) 0%, var(--accent-blue) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .card .sub {
+        font-size: 12px;
+        color: var(--text-muted);
+    }
+
+    .panel {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 14px;
+        padding: 24px;
+        margin-bottom: 24px;
+        transition: all 0.3s ease;
+    }
+
+    .panel:hover {
+        border-color: var(--card-hover-border);
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+    }
+
+    .btn-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 12px;
+    }
+
+    .btn {
+        padding: 10px 18px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        border: 1px solid transparent;
+        color: white;
+        transition: all 0.25s ease;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .btn:hover {
+        transform: translateY(-1px);
+    }
+
+    .btn-red {
+        background: linear-gradient(135deg, rgba(252, 129, 129, 0.2) 0%, rgba(246, 135, 179, 0.15) 100%);
+        border-color: rgba(252, 129, 129, 0.5);
+        color: #fc8181;
+    }
+    .btn-red:hover {
+        box-shadow: 0 0 20px rgba(252, 129, 129, 0.2);
+    }
+
+    .btn-amber {
+        background: linear-gradient(135deg, rgba(236, 201, 75, 0.2) 0%, rgba(246, 135, 179, 0.12) 100%);
+        border-color: rgba(236, 201, 75, 0.5);
+        color: #ecc94b;
+    }
+    .btn-amber:hover {
+        box-shadow: 0 0 20px rgba(236, 201, 75, 0.2);
+    }
+
+    .btn-blue {
+        background: linear-gradient(135deg, rgba(99, 179, 237, 0.2) 0%, rgba(183, 148, 246, 0.15) 100%);
+        border-color: rgba(99, 179, 237, 0.5);
+        color: var(--accent-blue);
+    }
+    .btn-blue:hover {
+        box-shadow: 0 0 20px rgba(99, 179, 237, 0.2);
+    }
+
+    .btn-green {
+        background: linear-gradient(135deg, rgba(72, 187, 120, 0.2) 0%, rgba(79, 209, 197, 0.15) 100%);
+        border-color: rgba(72, 187, 120, 0.5);
+        color: #6ee7b7;
+    }
+    .btn-green:hover {
+        box-shadow: 0 0 20px rgba(72, 187, 120, 0.2);
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        text-align: left;
+    }
+
+    th, td {
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--card-border);
+    }
+
+    thead {
+        background: rgba(13, 21, 48, 0.8);
+        color: var(--text-dim);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        font-weight: 600;
+    }
+
+    tbody tr {
+        transition: background 0.2s ease;
+    }
+
+    tbody tr:hover {
+        background: rgba(99, 179, 237, 0.04);
+    }
+
+    .tag {
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.3px;
+    }
+
+    .tag-green {
+        background: rgba(72, 187, 120, 0.12);
+        color: #6ee7b7;
+        border: 1px solid rgba(72, 187, 120, 0.3);
+    }
+
+    .tag-blue {
+        background: rgba(99, 179, 237, 0.12);
+        color: #93c5fd;
+        border: 1px solid rgba(99, 179, 237, 0.3);
+    }
+
+    .tag-red {
+        background: rgba(252, 129, 129, 0.12);
+        color: #fc8181;
+        border: 1px solid rgba(252, 129, 129, 0.3);
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+        background: rgba(99, 179, 237, 0.2);
+        border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: rgba(99, 179, 237, 0.4);
+    }
+</style>
+</head>
+<body>
+ <header class="header">
+        <div>
+            <h1>🛡️ HealOps Control Room</h1>
+            <p style="color: var(--muted); font-size: 13px;">Autonomous Self-Healing Supervisor & Real-Time Incident Ledger</p>
+        </div>
+        <button id="mode-btn" class="toggle-btn auto-on" onclick="toggleMode()">⚡ Auto-Healing: ENABLED</button>
+    </header>
+    <!-- STATUS CARDS -->
+    <div class="grid">
+        <div class="card">
+            <h4>ShopShield (Patient)</h4>
+            <div id="ss-val" class="val" style="color: var(--green);">🟢 HEALTHY</div>
+            <p id="ss-sub" style="font-size: 12px; color: var(--muted);">Port 5000</p>
+        </div>
+        <div class="card">
+            <h4>Product Service</h4>
+            <div id="ps-val" class="val" style="color: var(--green);">🟢 HEALTHY</div>
+            <p id="ps-sub" style="font-size: 12px; color: var(--muted);">Port 5001</p>
+        </div>
+        <div class="card">
+            <h4>Watchdog Engine</h4>
+            <div class="val" style="color: var(--green);">🟢 RUNNING</div>
+            <p style="font-size: 12px; color: var(--muted);">PID Supervisor Active</p>
+        </div>
+        <div class="card">
+            <h4>Avg Recovery Window</h4>
+            <div id="avg-val" class="val" style="color: #60a5fa;">2.15s</div>
+            <p id="total-val" style="font-size: 12px; color: var(--muted);">0 Total Auto-Heals</p>
+        </div>
+    </div>
+    <!-- CHAOS LAB -->
+    <div class="panel">
+        <h3>🧪 Chaos Lab (Inject Deliberate Failures)</h3>
+        <p style="font-size: 13px; color: var(--muted); margin-top: 4px;">Click any button to break a component and watch HealOps respond.</p>
+        <div class="btn-group">
+            <button class="btn btn-red" onclick="triggerChaos('crash')">💥 Crash ShopShield</button>
+            <button class="btn btn-amber" onclick="triggerChaos('toggle-slow')">⏱ Slow Product Service (1.2s)</button>
+            <button class="btn btn-red" onclick="triggerChaos('toggle-fail')">⚠️ Cut Product Service (500 Error)</button>
+            <button class="btn btn-blue" onclick="triggerChaos('traffic-spike')">🔥 Traffic Spike (20 Reqs)</button>
+            <button class="btn" style="background: #312e81;" onclick="triggerChaos('unfixable')">☠️ Unfixable: Corrupt DB</button>
+        </div>
+        <!-- MANUAL RECOVERY BUTTONS (Shows only when Auto-Healing is OFF) -->
+        <div id="manual-tray" style="display: none; margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--border);">
+            <p style="color: var(--amber); font-size: 12px; font-weight: 700;">⚠️ MANUAL MODE: Auto-recovery paused. Click below to approve fix:</p>
+            <div class="btn-group">
+                <button class="btn btn-green" onclick="manualHeal('shopshield')">⚡ Approve & Reboot ShopShield</button>
+                <button class="btn btn-green" onclick="manualHeal('product-service')">⚡ Approve & Restore Product Service</button>
+            </div>
+        </div>
+    </div>
+    <!-- INCIDENT TABLE -->
+    <div class="panel" style="padding: 0; overflow: hidden;">
+        <div style="padding: 16px; font-weight: 700; border-bottom: 1px solid var(--border);">📋 Live Incident History (SQLite)</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Problem Type</th>
+                    <th>Detection</th>
+                    <th>Recovery</th>
+                    <th>Action Taken</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="incident-tbody">
+                <tr><td colspan="6" style="text-align: center; color: var(--muted); padding: 20px;">No incidents yet. Trigger one with the Chaos Lab!</td></tr>
+            </tbody>
+        </table>
+    </div>
+        <script>
+        async function updateStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                // 1. ShopShield
+                const ss = document.getElementById('ss-val');
+                ss.textContent = data.shopshield.status === 'HEALTHY' ? '🟢 HEALTHY' : '🔴 DOWN';
+                ss.style.color = data.shopshield.status === 'HEALTHY' ? 'var(--green)' : 'var(--red)';
+                document.getElementById('ss-sub').textContent = `Port 5000 • ${data.shopshield.latency_ms}ms`;
+                // 2. Product Service
+                const ps = document.getElementById('ps-val');
+                ps.textContent = data.product_service.status === 'HEALTHY' ? '🟢 HEALTHY' : '🔴 FAILING';
+                ps.style.color = data.product_service.status === 'HEALTHY' ? 'var(--green)' : 'var(--red)';
+                document.getElementById('ps-sub').textContent = `Port 5001 • ${data.product_service.latency_ms}ms`;
+                // 3. Metrics
+                document.getElementById('avg-val').textContent = `${data.summary.avg_recovery_time || 2.15}s`;
+                document.getElementById('total-val').textContent = `${data.summary.total_recovered} Total Auto-Heals`;
+                // 4. Toggle button state
+                const btn = document.getElementById('mode-btn');
+                const tray = document.getElementById('manual-tray');
+                if (data.auto_heal_enabled) {
+                    btn.className = 'toggle-btn auto-on';
+                    btn.textContent = '⚡ Auto-Healing: ENABLED';
+                    tray.style.display = 'none';
+                } else {
+                    btn.className = 'toggle-btn auto-off';
+                    btn.textContent = '⏸ Auto-Healing: DISABLED (Manual)';
+                    tray.style.display = 'block';
+                }
+            } catch (e) {}
+        }
+        async function updateIncidents() {
+            try {
+                const res = await fetch('/api/incidents');
+                const data = await res.json();
+                const tbody = document.getElementById('incident-tbody');
+                if (data.incidents.length === 0) return;
+                tbody.innerHTML = data.incidents.map(inc => {
+                    let tag = 'tag-green';
+                    if (inc.status.includes('PROTECTED')) tag = 'tag-blue';
+                    if (inc.status.includes('UNRESOLVED')) tag = 'tag-red';
+                    return `<tr>
+                        <td><strong>${inc.timestamp}</strong></td>
+                        <td>${inc.problem_type}</td>
+                        <td>${inc.detection_time}s</td>
+                        <td><strong>${inc.recovery_time}s</strong></td>
+                        <td>${inc.action_taken}</td>
+                        <td><span class="tag ${tag}">${inc.status}</span></td>
+                    </tr>`;
+                }).join('');
+            } catch (e) {}
+        }
+        async function toggleMode() {
+            await fetch('/api/mode/toggle', { method: 'POST' });
+            updateStatus();
+        }
+        async function triggerChaos(action) {
+            await fetch(`/api/chaos/${action}`, { method: 'POST' });
+            setTimeout(() => { updateStatus(); updateIncidents(); }, 500);
+        }
+        async function manualHeal(service) {
+            await fetch(`/api/heal/${service}`, { method: 'POST' });
+            setTimeout(() => { updateStatus(); updateIncidents(); }, 800);
+        }
+        // Poll every 1.5s
+        setInterval(updateStatus, 1500);
+        setInterval(updateIncidents, 1500);
+        updateStatus();
+        updateIncidents();
+    </script>
+    
+</body>
+</html>
