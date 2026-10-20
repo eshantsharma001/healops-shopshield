@@ -52,7 +52,7 @@
                             <div class="product-info">
                                 <span class="product-badge">{{ product.badge }}</span>
                                 <h4>{{ product.name }}</h4>
-                                <p class="product-price">\${{ product.price }}</p>
+                                <p class="product-price">{{ product.price|inr }}</p>
                                 <div style="display: flex; gap: 8px; flex-direction: column;">
                                     <!-- Embedded Data Attributes for the JavaScript engine -->
                                     <button class="btn-add-cart add-to-cart-btn" 
@@ -91,9 +91,9 @@
             <div class="cart-modal-footer">
                 <div class="cart-total-row">
                     <span>Total:</span>
-                    <span id="cart-total-price">\$0.00</span>
+                    <span id="cart-total-price">₹0.00</span>
                 </div>
-                <button class="btn-checkout" onclick="alert('Checkout feature coming soon!')">Proceed to Checkout</button>
+                <button class="btn-checkout" id="proceed-checkout-btn">Proceed to Checkout</button>
             </div>
         </div>
     </div>
@@ -156,7 +156,7 @@
             cartItemsContainer.innerHTML = '';
             if (cart.length === 0) {
                 cartItemsContainer.innerHTML = '<p class="empty-cart-msg">Your cart is empty.</p>';
-                cartTotalPrice.textContent = '\$0.00';
+                cartTotalPrice.textContent = '₹0.00';
                 return;
             }
 
@@ -168,7 +168,7 @@
                 row.innerHTML = `
                     <div class="cart-item-info">
                         <h4>${item.name}</h4>
-                        <p>$${item.price.toFixed(2)}</p>
+                        <p>${formatINR(item.price)}</p>
                     </div>
                     <div class="cart-item-actions">
                         <button onclick="changeQuantity('${item.id}', -1)">-</button>
@@ -178,8 +178,20 @@
                 `;
                 cartItemsContainer.appendChild(row);
             });
-            cartTotalPrice.textContent = `$${total.toFixed(2)}`;
+            cartTotalPrice.textContent = formatINR(total);
         }
+
+        function formatINR(value) {
+            return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(value);
+        }
+
+        document.getElementById('proceed-checkout-btn').addEventListener('click', () => {
+            if (cart.length === 0) {
+                alert('Your cart is empty. Add an item before checking out.');
+                return;
+            }
+            window.location.href = '/?checkout=1';
+        });
 
         // Initialize display setup on window refresh
         updateBadge();
